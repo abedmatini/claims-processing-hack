@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Claims Processing Multi-Agent Workflow
-Orchestrates OCR Agent and JSON Structuring Agent using sequential processing
+Orchestrates OCR Agent and OCR Text Extraction Agent using sequential processing
 """
 import os
 import sys
@@ -63,8 +63,8 @@ async def process_claim_workflow(image_path: str) -> dict:
     ocr_text = ocr_result.get("text", "")
     logger.info(f"✅ OCR Agent extracted {len(ocr_text)} characters")
     
-    # Step 2: JSON Structuring Agent - Convert OCR text to structured JSON
-    logger.info("📊 Step 2: JSON Structuring Agent - Converting to structured JSON...")
+    # Step 2: OCR Text Extraction Agent - Convert OCR text to structured JSON
+    logger.info("📊 Step 2: OCR Text Extraction Agent - Converting to structured JSON...")
     
     # Create AI Project Client
     with AIProjectClient(
@@ -72,41 +72,44 @@ async def process_claim_workflow(image_path: str) -> dict:
         credential=DefaultAzureCredential(),
     ) as project_client:
         
-        # Create JSON structuring agent
+        # Create OCR Text Extraction agent
         agent = project_client.agents.create_version(
-            agent_name="WorkflowJSONStructuringAgent",
+            agent_name="WorkflowOCRTextExtractionAgent",
             definition=PromptAgentDefinition(
                 model=MODEL_DEPLOYMENT_NAME,
-                instructions="""You are a JSON structuring agent specialized in insurance claims data.
+                instructions="""You are an expert OCR text extraction assistant specialized in extracting and structuring text content from JPEG images.
 
 Your task:
-1. Receive OCR text from claim documents
-2. Structure the text into valid JSON format with these fields:
-   - vehicle_info: {make, model, color, year}
-   - damage_assessment: {severity, affected_areas[], estimated_cost}
-   - incident_info: {date, location, description}
-3. Return ONLY valid JSON, no markdown or explanations
+1. Receive OCR text extracted from documents
+2. Extract ALL visible text and structure it into a clean, organized JSON format
+3. Focus solely on text extraction - do not analyze any visual elements or pictures
+4. Structure the text into valid JSON format with these fields:
+   - document_type: form | letter | receipt | invoice | certificate | report | handwritten | mixed | other
+   - extracted_text: {raw_text, text_blocks[], structured_fields}
+   - text_quality: {overall_legibility, issues[]}
+   - confidence: high | medium | low
+5. Return ONLY valid JSON, no markdown or explanations
 
 Always return properly formatted JSON.""",
                 temperature=0.1,
             ),
         )
         
-        logger.info(f"Created JSON Structuring Agent: {agent.name}")
+        logger.info(f"Created OCR Text Extraction Agent: {agent.name}")
         
         # Get OpenAI client for agent responses
         openai_client = project_client.get_openai_client()
         
         # Create user query with OCR text
-        user_query = f"""Please structure the following OCR text into the standardized JSON format.
+        user_query = f"""Please extract and structure all text from the following OCR output into the standardized JSON format.
 
 ---OCR TEXT START---
 {ocr_text}
 ---OCR TEXT END---
 
-Return only the structured JSON object."""
+Return only the structured JSON object with all extracted text."""
         
-        logger.info("Sending OCR text to structuring agent...")
+        logger.info("Sending OCR text to extraction agent...")
         
         # Get response from agent
         response = openai_client.responses.create(
@@ -127,7 +130,7 @@ Return only the structured JSON object."""
                     response_text = response_text[start:end]
             
             structured_data = json.loads(response_text)
-            logger.info("✅ Successfully structured OCR text into JSON")
+            logger.info("✅ Successfully extracted and structured OCR text into JSON")
             
             # Add metadata
             structured_data["metadata"] = {
